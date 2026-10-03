@@ -29,4 +29,14 @@ class ReviewPosterTest {
             body,
         )
     }
+
+    @Test
+    fun `keeps the model's own lines intact, including leading pipes and indentation`() {
+        val fix = "Add a check:\n    || items.isEmpty()\n| case | result |\n|------|--------|"
+        val body = ReviewPoster(File(".")).commentBody(
+            Finding("a.kt", 1, Severity.MINOR, "  Title  ", "what", "why", "\n$fix\n")
+        )
+        assertEquals(true, body.endsWith("**How to fix:** $fix"), body)
+        assertEquals(true, body.startsWith("**Minor: Title**"), body)
+    }
 }

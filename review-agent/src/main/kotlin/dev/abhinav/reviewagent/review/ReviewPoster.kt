@@ -11,16 +11,18 @@ import java.io.File
  */
 class ReviewPoster(private val repoRoot: File, private val mapper: ObjectMapper = ObjectMapper()) {
 
-    /** The comment as a reader sees it: the bug in one line, then what, why, and the fix. */
-    internal fun commentBody(f: Finding): String = """
-        |**${f.severity.label.replaceFirstChar { it.uppercase() }}: ${f.title}**
-        |
-        |**What goes wrong:** ${f.whatGoesWrong}
-        |
-        |**Why it matters:** ${f.whyItMatters}
-        |
-        |**How to fix:** ${f.howToFix}
-    """.trimMargin()
+    /**
+     * The comment as a reader sees it: the bug in one line, then what, why, and the fix.
+     * Only the model's text is trimmed, field by field. Trimming the assembled string
+     * (e.g. trimMargin) would also strip leading "|" from the model's own lines, such as
+     * markdown table rows or code.
+     */
+    internal fun commentBody(f: Finding): String = listOf(
+        "**${f.severity.label.replaceFirstChar { it.uppercase() }}: ${f.title.trim()}**",
+        "**What goes wrong:** ${f.whatGoesWrong.trim()}",
+        "**Why it matters:** ${f.whyItMatters.trim()}",
+        "**How to fix:** ${f.howToFix.trim()}",
+    ).joinToString("\n\n")
 
     fun post(prNumber: Int, summary: String, findings: List<Finding>): Result<Unit> {
         val body = mapOf(
