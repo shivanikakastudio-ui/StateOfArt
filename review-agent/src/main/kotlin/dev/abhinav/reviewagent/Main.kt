@@ -57,13 +57,26 @@ fun main(args: Array<String>) {
     )
 
     val result = agent.run("Review pull request #$prNumber.")
+
+    // Save the trace first: anything after this can fail, and a finished, paid run
+    // must always leave its trace behind.
+    val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now())
+    val traceFile = writeJson(repoRoot, "pr-$prNumber-$stamp.trace.json", traceJson(result.trace))
+
     val usage = result.totalUsage
     val cost = usage.inputTokens * INPUT_PRICE / 1e6 + usage.outputTokens * OUTPUT_PRICE / 1e6
     println("\n=== ${result.outcome} after ${result.turns} turns, ${usage.inputTokens} in / ${usage.outputTokens} out, " +
         "≈ $${"%.3f".format(cost)}${result.detail?.let { " ($it)" } ?: ""}")
 
     val review = submitTool.submitted
-    val validation = review?.let { FindingValidator(DiffLines.parse(fetchFullDiff(repoRoot, prNumber))).validate(it.findings) }
+    // Checking findings needs the full diff from GitHub, which can fail (network, gh not logged in).
+    // Record the error instead of crashing, and post nothing unchecked.
+    val checked = review?.let {
+        runCatching { FindingValidator(DiffLines.parse(fetchFullDiff(repoRoot, prNumber))).validate(it.findings) }
+    }
+    val validation = checked?.getOrNull()
+    val validationError = checked?.exceptionOrNull()?.let { "${it.javaClass.simpleName}: ${it.message}" }
+    validationError?.let { System.err.println("\nCould not check findings against the diff: $it") }
 
     if (review != null && validation != null) {
         println("\n${review.summary}\n")
@@ -84,8 +97,6 @@ fun main(args: Array<String>) {
             .onFailure { System.err.println("\nPosting failed: ${it.message}") }
     }
 
-    val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now())
-    val traceFile = writeJson(repoRoot, "pr-$prNumber-$stamp.trace.json", traceJson(result.trace))
     val runFile = writeJson(
         repoRoot, "pr-$prNumber-$stamp.json",
         mapOf(
@@ -102,12 +113,13 @@ fun main(args: Array<String>) {
             "accepted" to validation?.accepted?.map(::findingMap),
             "rejected" to validation?.rejected?.map { findingMap(it.finding) + ("reason" to it.reason) },
             "posted" to posted,
+            "validationError" to validationError,
             "traceFile" to traceFile.name,
         ),
     )
     println("\nRun saved to ${runFile.relativeTo(repoRoot)} (trace: ${traceFile.name})")
 
-    if (result.outcome != Outcome.COMPLETED || (post && !posted)) exitProcess(1)
+    if (result.outcome != Outcome.COMPLETED || validationError != null || (post && !posted)) exitProcess(1)
 }
 
 private fun findingMap(f: dev.abhinav.reviewagent.review.Finding) =
