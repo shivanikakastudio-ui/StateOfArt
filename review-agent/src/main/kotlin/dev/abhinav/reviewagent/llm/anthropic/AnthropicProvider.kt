@@ -36,7 +36,10 @@ class AnthropicProvider(
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(maxTokens)
-            // Return a readable summary of the model's reasoning (default is none), for run traces.
+            // Return a readable summary of the model's reasoning, for run traces. On Opus 5.5
+            // thinking is always on and omitting this already means adaptive, so this only changes
+            // what is returned, not cost or behaviour. On older models (e.g. Opus 4.8) omitting it
+            // means no thinking, so switching models here would also switch thinking on.
             .thinking(ThinkingConfigAdaptive.builder().display(ThinkingConfigAdaptive.Display.SUMMARIZED).build())
             .apply { if (!system.isNullOrBlank()) system(system) }
             .apply { tools.forEach { addTool(it.toAnthropicTool()) } }

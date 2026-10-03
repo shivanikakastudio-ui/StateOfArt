@@ -42,7 +42,19 @@ class Agent(
 
         for (turnNumber in 1..config.maxTurns) {
             val started = System.nanoTime()
-            val turn = provider.complete(system, messages, toolSpecs)
+            val turn = try {
+                provider.complete(system, messages, toolSpecs)
+            } catch (e: Exception) {
+                // Return what happened so far instead of throwing: a failed run is the one
+                // whose trace matters most. The SDK has already retried transient errors.
+                val detail = "turn $turnNumber: ${e.javaClass.simpleName}: ${e.message}"
+                log("   ! model call failed: $detail")
+                trace += TraceEntry("error", detail, turn = turnNumber)
+                return AgentResult(
+                    Outcome.PROVIDER_ERROR, finalText = "", turns = turnNumber - 1,
+                    totalUsage = Usage(totalInput, totalOutput), detail = detail, trace = trace.toList(),
+                )
+            }
             trace += TraceEntry(
                 role = "assistant", content = turn.text, turn = turnNumber,
                 thinking = turn.reasoning.ifBlank { null },

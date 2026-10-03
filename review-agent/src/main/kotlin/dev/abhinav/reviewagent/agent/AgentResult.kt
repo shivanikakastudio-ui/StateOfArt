@@ -12,6 +12,8 @@ enum class Outcome {
     REFUSED,
     /** The model finished without calling the finish tool, even after a reminder. */
     NO_SUBMISSION,
+    /** Calling the model failed (network, rate limit, server error); see [AgentResult.detail]. */
+    PROVIDER_ERROR,
     /** A stop reason the loop doesn't handle; see [AgentResult.detail]. */
     UNEXPECTED_STOP,
 }
