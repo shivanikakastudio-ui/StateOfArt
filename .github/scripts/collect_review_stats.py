@@ -18,6 +18,10 @@ import tempfile
 WORKFLOW = "AI Review"
 # Artifacts older than this are deleted by GitHub, so there is nothing left to collect.
 RETENTION_DAYS = 90
+LIST_LIMIT = 500
+# Runs handled per invocation, oldest first, so a big backlog finishes in steps and
+# each step gets pushed instead of timing out with nothing saved.
+BATCH_SIZE = 100
 ARTIFACT = re.compile(r"^ai-review-pr-(\d+)-(\d+)$")
 
 
@@ -39,15 +43,20 @@ def collected_keys(index: pathlib.Path) -> set[tuple[int, int]]:
 def uncollected_runs(done: set[tuple[int, int]]) -> list[tuple[int, int]]:
     """(run id, latest attempt) for completed runs within the retention window that aren't
     recorded yet. Decided from the run list alone, so collected runs cost no further API calls."""
-    runs = json.loads(gh("run", "list", "--workflow", WORKFLOW, "--limit", "500",
+    runs = json.loads(gh("run", "list", "--workflow", WORKFLOW, "--limit", str(LIST_LIMIT),
                          "--json", "databaseId,attempt,status,createdAt"))
+    if len(runs) >= LIST_LIMIT:
+        print(f"Warning: listed the newest {LIST_LIMIT} runs only; older runs within "
+              f"{RETENTION_DAYS} days may be missed.", file=sys.stderr)
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=RETENTION_DAYS)
-    return [
-        (r["databaseId"], r["attempt"]) for r in runs
+    pending = [
+        r for r in runs
         if r["status"] == "completed"
         and datetime.datetime.fromisoformat(r["createdAt"].replace("Z", "+00:00")) >= cutoff
         and (r["databaseId"], r["attempt"]) not in done
     ]
+    pending.sort(key=lambda r: r["createdAt"])  # oldest first: closest to expiring
+    return [(r["databaseId"], r["attempt"]) for r in pending[:BATCH_SIZE]]
 
 
 def attempt_meta(run_id: int, attempt: int) -> dict:
@@ -82,9 +91,7 @@ def collect_run(run_id: int, latest_attempt: int, stats: pathlib.Path, done: set
             # Cancelled, skipped or early-failing runs have no artifact. Record them anyway,
             # so they're marked as collected and never retried.
             if (run_id, latest_attempt) not in done:
-                meta = attempt_meta(run_id, latest_attempt)
-                prs = meta.get("pull_requests") or []
-                rows.append(base_row(run_id, latest_attempt, prs[0]["number"] if prs else None, meta))
+                rows.append(row_without_artifact(run_id, latest_attempt))
             return rows
 
         for artifact in sorted(pathlib.Path(tmp).iterdir()):
@@ -120,7 +127,19 @@ def collect_run(run_id: int, latest_attempt: int, stats: pathlib.Path, done: set
                     posted=r.get("posted"),
                 )
             rows.append(row)
+
+    # A re-run whose latest attempt left no artifact: earlier attempts' artifacts still
+    # downloaded, so record the latest attempt too, or it would be fetched on every trigger.
+    if (run_id, latest_attempt) not in done and all(r["attempt"] != latest_attempt for r in rows):
+        rows.append(row_without_artifact(run_id, latest_attempt))
     return rows
+
+
+def row_without_artifact(run_id: int, attempt: int) -> dict:
+    meta = attempt_meta(run_id, attempt)
+    # GitHub doesn't link manually started (workflow_dispatch) runs to a PR, so pr is null for those.
+    prs = meta.get("pull_requests") or []
+    return base_row(run_id, attempt, prs[0]["number"] if prs else None, meta)
 
 
 def main() -> None:
