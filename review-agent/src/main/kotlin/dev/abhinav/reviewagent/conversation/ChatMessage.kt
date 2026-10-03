@@ -1,4 +1,6 @@
-package dev.abhinav.reviewagent.llm
+package dev.abhinav.reviewagent.conversation
+
+import dev.abhinav.reviewagent.tools.ToolResult
 
 /** The conversation history the agent builds up and sends on every turn. */
 sealed interface ChatMessage {

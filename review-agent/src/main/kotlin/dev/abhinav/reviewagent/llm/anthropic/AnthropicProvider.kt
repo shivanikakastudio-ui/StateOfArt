@@ -1,4 +1,4 @@
-package dev.abhinav.reviewagent.llm
+package dev.abhinav.reviewagent.llm.anthropic
 
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
@@ -7,11 +7,18 @@ import com.anthropic.models.messages.ContentBlockParam
 import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
+import com.anthropic.models.messages.StopReason as AnthropicStopReason
 import com.anthropic.models.messages.TextBlockParam
 import com.anthropic.models.messages.Tool
 import com.anthropic.models.messages.ToolResultBlockParam
 import com.anthropic.models.messages.ToolUseBlockParam
-import com.anthropic.models.messages.StopReason as AnthropicStopReason
+import dev.abhinav.reviewagent.conversation.ChatMessage
+import dev.abhinav.reviewagent.conversation.ModelTurn
+import dev.abhinav.reviewagent.conversation.StopReason
+import dev.abhinav.reviewagent.conversation.Usage
+import dev.abhinav.reviewagent.llm.LlmProvider
+import dev.abhinav.reviewagent.tools.ToolCall
+import dev.abhinav.reviewagent.tools.ToolSpec
 
 /** Adapter between our provider-agnostic types and the Anthropic Java SDK. */
 class AnthropicProvider(

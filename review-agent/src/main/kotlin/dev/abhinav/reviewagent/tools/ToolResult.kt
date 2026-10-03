@@ -1,4 +1,4 @@
-package dev.abhinav.reviewagent.llm
+package dev.abhinav.reviewagent.tools
 
 /** What we send back after running a tool. */
 data class ToolResult(

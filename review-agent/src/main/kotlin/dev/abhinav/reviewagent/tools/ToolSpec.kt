@@ -1,4 +1,4 @@
-package dev.abhinav.reviewagent.llm
+package dev.abhinav.reviewagent.tools
 
 /** A tool the model may call. [properties] is a JSON Schema "properties" object. */
 data class ToolSpec(

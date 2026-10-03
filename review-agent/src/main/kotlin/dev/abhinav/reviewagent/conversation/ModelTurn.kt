@@ -1,4 +1,6 @@
-package dev.abhinav.reviewagent.llm
+package dev.abhinav.reviewagent.conversation
+
+import dev.abhinav.reviewagent.tools.ToolCall
 
 /** One model response. */
 data class ModelTurn(

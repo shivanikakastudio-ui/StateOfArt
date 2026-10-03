@@ -1,4 +1,4 @@
-package dev.abhinav.reviewagent.llm
+package dev.abhinav.reviewagent.conversation
 
 enum class StopReason {
     /** The model finished its answer. */
