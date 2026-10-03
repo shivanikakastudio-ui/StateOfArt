@@ -1,5 +1,7 @@
 package dev.abhinav.reviewagent.tools
 
+import dev.abhinav.reviewagent.process.CommandResult
+import dev.abhinav.reviewagent.process.runCommand
 import java.io.File
 
 /** Searches tracked files in the repository with `git grep`. */

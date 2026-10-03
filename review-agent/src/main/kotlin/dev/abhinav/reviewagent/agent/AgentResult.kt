@@ -10,6 +10,8 @@ enum class Outcome {
     /** The model's reply was cut off by maxTokens. */
     TRUNCATED,
     REFUSED,
+    /** The model finished without calling the finish tool, even after a reminder. */
+    NO_SUBMISSION,
     /** A stop reason the loop doesn't handle; see [AgentResult.detail]. */
     UNEXPECTED_STOP,
 }
