@@ -41,11 +41,25 @@ jobs:
             exit 1
           fi
 
+      # Manual runs check out and build the PR's code with secrets available,
+      # so only allow PRs whose branch lives in this repository.
+      - name: Refuse fork PRs on manual runs
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json isCrossRepository --jq .isCrossRepository)" != "false" ]; then
+            echo "::error::PR #$PR_NUMBER is from a fork; AI review only runs on PRs from this repository."
+            exit 1
+          fi
+
       # For pull_request events this checks out the PR merged into its base,
       # so search_code and read_file see the code being reviewed.
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr_number) || '' }}
+          # The agent posts through GH_TOKEN; don't leave a token in .git/config for it to read.
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:

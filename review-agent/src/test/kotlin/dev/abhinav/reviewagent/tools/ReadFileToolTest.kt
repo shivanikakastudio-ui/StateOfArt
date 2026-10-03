@@ -2,6 +2,7 @@ package dev.abhinav.reviewagent.tools
 
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Paths
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -41,6 +42,20 @@ class ReadFileToolTest {
     fun `refuses git internals and paths outside the repo`() {
         assertTrue(read(".git/config").isError)
         assertTrue(read("../outside.txt").isError)
+    }
+
+    @Test
+    fun `refuses a tracked symlink that points at an untracked file`() {
+        Files.createSymbolicLink(repo.resolve("notes.txt").toPath(), Paths.get("local.properties"))
+        repo.git("add", "notes.txt")
+        val result = read("notes.txt")
+        assertTrue(result.isError)
+        assertFalse("secret" in result.content)
+    }
+
+    @Test
+    fun `treats glob characters in the path literally`() {
+        assertTrue(read("*.properties").isError)
     }
 
     private fun File.git(vararg args: String) {

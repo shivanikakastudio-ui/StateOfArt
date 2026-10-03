@@ -3,6 +3,7 @@ package dev.abhinav.reviewagent.tools
 import dev.abhinav.reviewagent.process.CommandResult
 import dev.abhinav.reviewagent.process.runCommand
 import java.io.File
+import java.nio.file.Files
 
 /**
  * Reads a range of lines from a file tracked by git, with line numbers. Untracked and
@@ -36,7 +37,13 @@ class ReadFileTool(
         val file = resolveInRepo(repoRoot, path)
             ?: return error(call, "path must be a relative path inside the repository: $path")
         if (!file.isFile) return error(call, "No such file: $path")
-        if (!isTracked(path)) return error(call, "Only files tracked by git can be read: $path")
+        // Refuse symlinks anywhere in the path: a tracked link could point at an untracked file.
+        val root = repoRoot.canonicalFile
+        if (File(root, path).toPath().normalize() != file.toPath()) {
+            return error(call, "Symbolic links can't be read: $path")
+        }
+        // Check the file that will actually be read, not the string the model sent.
+        if (!isTracked(file.relativeTo(root).path)) return error(call, "Only files tracked by git can be read: $path")
         if (file.length() > maxFileBytes) return error(call, "$path is too large to read (${file.length()} bytes)")
 
         val lines = try {
@@ -59,11 +66,14 @@ class ReadFileTool(
         return ToolResult(call.id, "$path (lines $start-$end of ${lines.size})\n$body$note")
     }
 
-    private fun isTracked(path: String): Boolean =
-        when (val result = runCommand(listOf("git", "ls-files", "--error-unmatch", "--", path), repoRoot, timeoutSeconds = 10)) {
+    private fun isTracked(relativePath: String): Boolean {
+        // --literal-pathspecs: treat * ? [ in the path as characters, not patterns.
+        val command = listOf("git", "--literal-pathspecs", "ls-files", "--error-unmatch", "--", relativePath)
+        return when (val result = runCommand(command, repoRoot, timeoutSeconds = 10)) {
             is CommandResult.Finished -> result.exitCode == 0
             else -> false
         }
+    }
 
     private fun error(call: ToolCall, message: String) = ToolResult(call.id, message, isError = true)
 }
