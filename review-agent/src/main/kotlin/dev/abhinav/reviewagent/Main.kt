@@ -1,26 +1,22 @@
 package dev.abhinav.reviewagent
 
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
-import com.anthropic.models.messages.MessageCreateParams
+import dev.abhinav.reviewagent.llm.AnthropicProvider
+import dev.abhinav.reviewagent.llm.ChatMessage
+import dev.abhinav.reviewagent.llm.LlmProvider
 
-// Step 1: a single request/response round trip. No tools, no loop yet.
+// Step 2: same single call as Step 1, but Main only knows about LlmProvider.
 fun main() {
-    // Reads ANTHROPIC_API_KEY from the environment.
-    val client = AnthropicOkHttpClient.fromEnv()
+    val provider: LlmProvider = AnthropicProvider()
 
-    val params = MessageCreateParams.builder()
-        .model("claude-opus-5-5")
-        .maxTokens(1024L)
-        .addUserMessage("In one sentence: what should a good pull request review focus on?")
-        .build()
+    val turn = provider.complete(
+        system = null,
+        messages = listOf(
+            ChatMessage.User("In one sentence: what should a good pull request review focus on?")
+        ),
+    )
 
-    val response = client.messages().create(params)
-
-    response.content()
-        .mapNotNull { it.text().orElse(null) }
-        .forEach { println(it.text()) }
-
-    println("\n[stop_reason=${response.stopReason().orElse(null)}, " +
-        "input_tokens=${response.usage().inputTokens()}, " +
-        "output_tokens=${response.usage().outputTokens()}]")
+    println(turn.text)
+    println("\n[stop_reason=${turn.stopReason}, " +
+        "input_tokens=${turn.usage.inputTokens}, " +
+        "output_tokens=${turn.usage.outputTokens}]")
 }
