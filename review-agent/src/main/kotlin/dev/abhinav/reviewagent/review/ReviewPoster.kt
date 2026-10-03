@@ -1,8 +1,8 @@
 package dev.abhinav.reviewagent.review
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import dev.abhinav.reviewagent.tools.CommandResult
-import dev.abhinav.reviewagent.tools.runCommand
+import dev.abhinav.reviewagent.process.CommandResult
+import dev.abhinav.reviewagent.process.runCommand
 import java.io.File
 
 /**

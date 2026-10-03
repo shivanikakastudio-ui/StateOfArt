@@ -6,15 +6,15 @@ import dev.abhinav.reviewagent.agent.Agent
 import dev.abhinav.reviewagent.agent.AgentConfig
 import dev.abhinav.reviewagent.agent.Outcome
 import dev.abhinav.reviewagent.llm.anthropic.AnthropicProvider
+import dev.abhinav.reviewagent.process.CommandResult
+import dev.abhinav.reviewagent.process.runCommand
 import dev.abhinav.reviewagent.review.DiffLines
 import dev.abhinav.reviewagent.review.FindingValidator
 import dev.abhinav.reviewagent.review.ReviewPoster
 import dev.abhinav.reviewagent.review.SubmitReviewTool
-import dev.abhinav.reviewagent.tools.CommandResult
 import dev.abhinav.reviewagent.tools.GetPrDiffTool
 import dev.abhinav.reviewagent.tools.ReadFileTool
 import dev.abhinav.reviewagent.tools.SearchCodeTool
-import dev.abhinav.reviewagent.tools.runCommand
 import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
@@ -49,7 +49,7 @@ fun main(args: Array<String>) {
         provider = AnthropicProvider(model = MODEL),
         system = SYSTEM_PROMPT,
         tools = listOf(GetPrDiffTool(repoRoot), SearchCodeTool(repoRoot), ReadFileTool(repoRoot), submitTool),
-        config = AgentConfig(finishTool = SubmitReviewTool.NAME),
+        config = AgentConfig(finishTool = submitTool),
     )
 
     val result = agent.run("Review pull request #$prNumber.")
