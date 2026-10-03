@@ -9,6 +9,7 @@ kotlin {
 
 dependencies {
     implementation(libs.anthropic.java)
+    implementation(libs.jackson.databind)
     testImplementation(kotlin("test"))
 }
 

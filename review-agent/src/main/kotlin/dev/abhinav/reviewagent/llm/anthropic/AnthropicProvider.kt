@@ -56,8 +56,10 @@ class AnthropicProvider(
                         .build()
                 )
                 .required(required)
+                .apply { if (strict) putAdditionalProperty("additionalProperties", JsonValue.from(false)) }
                 .build()
         )
+        .apply { if (strict) strict(true) }
         .build()
 
     private fun ChatMessage.toAnthropicParam(): MessageParam = when (this) {

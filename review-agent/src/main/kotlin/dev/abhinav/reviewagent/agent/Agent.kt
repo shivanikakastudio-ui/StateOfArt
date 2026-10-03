@@ -27,6 +27,7 @@ class Agent(
         val messages = mutableListOf<ChatMessage>(ChatMessage.User(task))
         var totalInput = 0L
         var totalOutput = 0L
+        var remindersSent = 0
 
         for (turnNumber in 1..config.maxTurns) {
             val turn = provider.complete(system, messages, toolSpecs)
@@ -40,13 +41,24 @@ class Agent(
                 AgentResult(outcome, turn.text, turnNumber, total, detail)
 
             when (turn.stopReason) {
-                StopReason.END_TURN -> return result(Outcome.COMPLETED)
+                StopReason.END_TURN -> {
+                    val finishTool = config.finishTool ?: return result(Outcome.COMPLETED)
+                    if (remindersSent >= 1) return result(Outcome.NO_SUBMISSION, "never called $finishTool")
+                    remindersSent++
+                    log("   ! answered without $finishTool; sending one reminder")
+                    messages += ChatMessage.User("Submit your review by calling $finishTool. Do not answer in plain text.")
+                }
                 StopReason.MAX_TOKENS -> return result(Outcome.TRUNCATED, "reply hit maxTokens")
                 StopReason.REFUSAL -> return result(Outcome.REFUSED)
                 StopReason.OTHER -> return result(Outcome.UNEXPECTED_STOP, "stop_reason=${turn.rawStopReason}")
                 StopReason.TOOL_USE -> {
                     // Every tool call must get a result with the matching id, in one message.
-                    messages += ChatMessage.ToolResults(turn.toolCalls.map(::runTool))
+                    val results = turn.toolCalls.map(::runTool)
+                    messages += ChatMessage.ToolResults(results)
+                    val finished = turn.toolCalls.zip(results).any { (call, res) ->
+                        call.name == config.finishTool && !res.isError
+                    }
+                    if (finished) return result(Outcome.COMPLETED)
                 }
             }
 
