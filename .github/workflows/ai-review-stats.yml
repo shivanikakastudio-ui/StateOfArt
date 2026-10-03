@@ -1,0 +1,76 @@
+name: AI Review Stats
+
+# Keeps a permanent history of AI Review runs on the `stats` branch:
+# run records and traces (artifacts expire after 90 days) plus runs.jsonl.
+on:
+  workflow_run:
+    workflows: [AI Review]
+    types: [completed]
+  schedule:
+    - cron: "17 3 * * *"   # nightly backfill of anything missed
+  workflow_dispatch:
+
+# One writer at a time, so pushes to `stats` never race. GitHub keeps only one waiting
+# run per group and drops older ones, so every run backfills everything not yet collected
+# rather than just the run that triggered it.
+concurrency:
+  group: ai-review-stats
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # push to the stats branch
+  actions: read     # list runs and download their artifacts
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # workflow_run and schedule always use the workflow and scripts from main,
+      # never a PR's code, so a PR can't change what gets written to stats.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Check out the stats branch (create it on first run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$url" stats >/dev/null; then
+            git clone --quiet --branch stats --single-branch "$url" stats
+          else
+            mkdir stats && cd stats
+            git init --quiet --initial-branch stats
+            git remote add origin "$url"
+            cat > README.md <<'MD'
+          # AI Review stats
+
+          Written by the **AI Review Stats** workflow; don't edit by hand.
+
+          - `runs.jsonl`: one line per AI Review run attempt (PR, commit, outcome, turns, tokens, estimated cost, findings accepted/rejected, posted, links)
+          - Runs without an artifact (cancelled, skipped, failed early) have a line with no stats. Manually started runs that have no artifact have `pr: null`, since GitHub doesn't link them to a PR
+          - `runs/pr-<n>/<run-id>-<attempt>/`: that attempt's run record and trace, copied from its artifact
+          MD
+            sed -i 's/^          //' README.md
+            git add README.md && git commit --quiet -m "Start AI Review stats history"
+          fi
+
+      - name: Collect run records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/collect_review_stats.py stats
+
+      - name: Commit and push
+        working-directory: stats
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing new to record."
+            exit 0
+          fi
+          git commit --quiet -m "Record AI Review runs ($(date -u +%Y-%m-%d))"
+          git push --quiet origin stats
