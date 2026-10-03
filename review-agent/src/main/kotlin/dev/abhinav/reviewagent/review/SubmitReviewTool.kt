@@ -33,9 +33,26 @@ class SubmitReviewTool : Tool {
                         "file" to mapOf("type" to "string", "description" to "Path from the repo root, as in the diff"),
                         "line" to mapOf("type" to "integer", "description" to "Line number in the new version of the file"),
                         "severity" to mapOf("type" to "string", "enum" to Severity.entries.map { it.label }),
-                        "message" to mapOf("type" to "string", "description" to "The problem, why it's wrong, and a fix"),
+                        "title" to mapOf(
+                            "type" to "string",
+                            "description" to "One short sentence naming the bug in plain words, " +
+                                "e.g. \"Secret files can be read through a shortcut file\"",
+                        ),
+                        "what_goes_wrong" to mapOf(
+                            "type" to "string",
+                            "description" to "A concrete scenario a reader can picture: what someone does, " +
+                                "and what then goes wrong. Two or three short sentences",
+                        ),
+                        "why_it_matters" to mapOf(
+                            "type" to "string",
+                            "description" to "The consequence for users, data, security or cost. One or two sentences",
+                        ),
+                        "how_to_fix" to mapOf(
+                            "type" to "string",
+                            "description" to "The change to make. Name code only where needed to act on it",
+                        ),
                     ),
-                    "required" to listOf("file", "line", "severity", "message"),
+                    "required" to TEXT_FIELDS.keys.toList().let { listOf("file", "line", "severity") + it },
                     "additionalProperties" to false,
                 ),
             ),
@@ -58,12 +75,19 @@ class SubmitReviewTool : Tool {
             val line = fields.intInput("line").getOrElse { return error(call, "findings[$i].${it.message}") }
                 ?: return error(call, "findings[$i].line is required")
             val severityLabel = item["severity"] as? String
+            val text = TEXT_FIELDS.keys.associateWith { key ->
+                (item[key] as? String)?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: return error(call, "findings[$i].$key must be a non-empty string")
+            }
             Finding(
                 file = item["file"] as? String ?: return error(call, "findings[$i].file must be a string"),
                 line = line,
                 severity = severityLabel?.let(Severity::fromLabel)
                     ?: return error(call, "findings[$i].severity must be one of ${Severity.entries.map { it.label }}"),
-                message = item["message"] as? String ?: return error(call, "findings[$i].message must be a string"),
+                title = text.getValue("title"),
+                whatGoesWrong = text.getValue("what_goes_wrong"),
+                whyItMatters = text.getValue("why_it_matters"),
+                howToFix = text.getValue("how_to_fix"),
             )
         }
 
@@ -75,5 +99,13 @@ class SubmitReviewTool : Tool {
 
     companion object {
         const val NAME = "submit_review"
+
+        /** The finding's text fields, keyed by their name in the schema. */
+        private val TEXT_FIELDS = linkedMapOf(
+            "title" to "Title",
+            "what_goes_wrong" to "What goes wrong",
+            "why_it_matters" to "Why it matters",
+            "how_to_fix" to "How to fix",
+        )
     }
 }
