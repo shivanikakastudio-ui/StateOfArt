@@ -17,8 +17,8 @@ class FindingValidatorTest {
     )
     private val validator = FindingValidator(diff)
 
-    private fun finding(file: String = "app/Foo.kt", line: Int = 2, message: String = "bug") =
-        Finding(file, line, Severity.MAJOR, message)
+    private fun finding(file: String = "app/Foo.kt", line: Int = 2, title: String = "Total is wrong") =
+        Finding(file, line, Severity.MAJOR, title, "what", "why", "fix")
 
     @Test
     fun `accepts findings on changed lines and rejects the rest with a reason`() {
@@ -27,7 +27,7 @@ class FindingValidatorTest {
                 finding(),
                 finding(file = "app/Other.kt"),
                 finding(line = 40),
-                finding(message = "  "),
+                finding(title = "  "),
                 finding(),
             )
         )
@@ -36,7 +36,7 @@ class FindingValidatorTest {
             listOf(
                 "file is not part of this PR's changes",
                 "line 40 is outside the changed sections",
-                "empty message",
+                "empty title",
                 "duplicate",
             ),
             result.rejected.map { it.reason },

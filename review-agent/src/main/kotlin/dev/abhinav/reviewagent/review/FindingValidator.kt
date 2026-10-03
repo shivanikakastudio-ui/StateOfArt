@@ -17,10 +17,10 @@ class FindingValidator(private val diff: DiffLines) {
 
         for (finding in findings) {
             val reason = when {
-                finding.message.isBlank() -> "empty message"
+                finding.title.isBlank() -> "empty title"
                 finding.file !in diff.files -> "file is not part of this PR's changes"
                 !diff.contains(finding.file, finding.line) -> "line ${finding.line} is outside the changed sections"
-                !seen.add(Triple(finding.file, finding.line, finding.message.trim())) -> "duplicate"
+                !seen.add(Triple(finding.file, finding.line, finding.title.trim().lowercase())) -> "duplicate"
                 else -> null
             }
             if (reason == null) accepted += finding else rejected += Rejected(finding, reason)

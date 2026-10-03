@@ -11,6 +11,17 @@ import java.io.File
  */
 class ReviewPoster(private val repoRoot: File, private val mapper: ObjectMapper = ObjectMapper()) {
 
+    /** The comment as a reader sees it: the bug in one line, then what, why, and the fix. */
+    internal fun commentBody(f: Finding): String = """
+        |**${f.severity.label.replaceFirstChar { it.uppercase() }}: ${f.title}**
+        |
+        |**What goes wrong:** ${f.whatGoesWrong}
+        |
+        |**Why it matters:** ${f.whyItMatters}
+        |
+        |**How to fix:** ${f.howToFix}
+    """.trimMargin()
+
     fun post(prNumber: Int, summary: String, findings: List<Finding>): Result<Unit> {
         val body = mapOf(
             "event" to "COMMENT",
@@ -20,7 +31,7 @@ class ReviewPoster(private val repoRoot: File, private val mapper: ObjectMapper 
                     "path" to it.file,
                     "line" to it.line,
                     "side" to "RIGHT",
-                    "body" to "**${it.severity.label}**: ${it.message}",
+                    "body" to commentBody(it),
                 )
             },
         )
