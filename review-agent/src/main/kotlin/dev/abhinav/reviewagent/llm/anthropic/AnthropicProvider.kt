@@ -136,6 +136,7 @@ class AnthropicProvider(
             text = text,
             toolCalls = toolCalls,
             stopReason = stopReason,
+            rawStopReason = stopReason().map { it.asString() }.orElse(null),
             usage = Usage(usage().inputTokens(), usage().outputTokens()),
             providerPayload = this,
         )
