@@ -1,0 +1,17 @@
+{
+  "pr" : 16,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T22:47:37.347517571Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 5,
+  "inputTokens" : 67430,
+  "outputTokens" : 2471,
+  "estimatedCostUsd" : 0.31914000000000003,
+  "summary" : "This PR records a full trace of each run: the prompts, the model's reasoning summaries, every tool call and its result, and the tokens and time for each turn. The trace is saved as a JSON file next to the run record. A failed model call now ends the run with a new PROVIDER_ERROR outcome instead of crashing, and if checking the findings against the diff fails, the error is recorded and nothing is posted. I found no problems that need raising. The trace file is written before any step that can fail. Usage totals and the turn count stay correct when the model call fails. The always-on thinking setting matches the configured model. The new test covers the failure path and the order of trace entries.",
+  "accepted" : [ ],
+  "rejected" : [ ],
+  "posted" : true,
+  "validationError" : null,
+  "traceFile" : "pr-16-20261003-224736.trace.json"
+}

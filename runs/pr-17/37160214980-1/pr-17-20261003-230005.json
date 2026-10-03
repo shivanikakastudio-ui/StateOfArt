@@ -1,0 +1,25 @@
+{
+  "pr" : 17,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T23:00:08.516594282Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 4,
+  "inputTokens" : 26998,
+  "outputTokens" : 3999,
+  "estimatedCostUsd" : 0.187972,
+  "summary" : "This PR adds a nightly and on-completion workflow that copies AI Review run records from their artifacts to a `stats` branch and adds one summary line per run attempt to runs.jsonl. The design holds up: the scripts come from main, there is a single writer, re-runs are handled per attempt, and runs without an artifact are recorded so they aren't fetched again. I found one real gap: a damaged record file is retried on every trigger and is never recorded.",
+  "accepted" : [ {
+    "file" : ".github/scripts/collect_review_stats.py",
+    "line" : 117,
+    "severity" : "minor",
+    "title" : "A damaged run record is never recorded and is retried on every trigger",
+    "whatGoesWrong" : "Suppose a review run is killed by its 15-minute timeout while it writes its record, so the JSON in the artifact is cut off. Each collection run copies the files into the stats folder, then fails to parse the JSON and skips the whole run. Nothing is added to runs.jsonl, so the next trigger tries again, and the same happens until the artifact expires after 90 days. The copied files are still committed, but no line in runs.jsonl points to them.",
+    "whyItMatters" : "The broken run never appears in runs.jsonl, not even as a row without stats. Each retry wastes downloads and API calls and takes a slot in the 100-run batch. The stats branch also collects files that no runs.jsonl line points to. The code comment says a truncated record must not stop the rest, but it does not mark the run as handled.",
+    "howToFix" : "Read the record in a try/except. If it can't be parsed, or isn't a JSON object, still write the row: leave the stats fields empty and add a flag such as `record_error`. That way the attempt counts as collected. Keep the outer catch-all only for temporary errors such as API or download failures."
+  } ],
+  "rejected" : [ ],
+  "posted" : true,
+  "validationError" : null,
+  "traceFile" : "pr-17-20261003-230005.trace.json"
+}

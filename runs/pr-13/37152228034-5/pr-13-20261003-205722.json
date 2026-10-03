@@ -1,0 +1,30 @@
+{
+  "pr" : 13,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T20:57:22.382589825Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 4,
+  "inputTokens" : 19381,
+  "outputTokens" : 2842,
+  "estimatedCostUsd" : 0.13436399999999998,
+  "summary" : "This PR adds a GitHub Actions workflow that runs the review agent on PRs, and limits read_file to files tracked by git. Both ideas make sense, but there are two ways around the protection. The tracked-file check is easy to bypass with a tracked symlink, and checkout leaves the job token in .git/config, which is exactly what that bypass can reach. Manually triggering a review on a fork PR also runs that fork's code with secrets.",
+  "accepted" : [ {
+    "file" : "review-agent/src/main/kotlin/dev/abhinav/reviewagent/tools/ReadFileTool.kt",
+    "line" : 39,
+    "severity" : "critical",
+    "message" : "The tracked check and the read look at different files. `isTracked(path)` checks the path the model supplied, but `file` comes from `resolveInRepo`, which follows symlinks (`canonicalFile`). A PR can commit a symlink such as `notes.txt -> .git/config` or `-> local.properties`. git tracks the symlink itself, so `git ls-files --error-unmatch notes.txt` succeeds. The target is inside the repo, so `resolveInRepo` accepts it, and `readLines()` returns the untracked target. That is the exact leak this change is meant to stop, and in CI `.git/config` holds the persisted GITHUB_TOKEN header (see the workflow finding). Fix: run the tracked check on the canonical path relative to `repoRoot.canonicalFile`, not the raw input. Also refuse symlinks outright: check `Files.isSymbolicLink` on each part of the path, or reject entries that `git ls-files -s` lists with mode 120000. Pass `--literal-pathspecs` (or `:(literal)`) so glob characters in a path aren't treated as patterns. Add a test that commits a symlink to an untracked file and expects an error."
+  }, {
+    "file" : ".github/workflows/ai-review.yml",
+    "line" : 47,
+    "severity" : "major",
+    "message" : "`actions/checkout` defaults to `persist-credentials: true`, which writes the GITHUB_TOKEN (with pull-requests: write) into `.git/config`. The model reads untrusted PR content, and the symlink bypass in ReadFileTool can reach `.git/config`. Even if that is fixed, there's no reason to leave the token on disk. The agent posts through GH_TOKEN, not git. Set `persist-credentials: false` on the checkout step."
+  }, {
+    "file" : ".github/workflows/ai-review.yml",
+    "line" : 49,
+    "severity" : "major",
+    "message" : "On workflow_dispatch, the job checks out `refs/pull/N/head` and then runs `./gradlew :review-agent:run` from that checkout, with ANTHROPIC_API_KEY and a write token in the environment. The `if:` skips fork PRs for pull_request events only, not for dispatch. If a maintainer triggers a review on a fork PR, the fork's own build scripts and agent code run with the secrets and can exfiltrate them. Fix: build and run the agent from the base branch, and check out the PR head into a separate directory used only as the repo the agent reads (pass that path to the agent). Or, on dispatch, refuse PRs whose head repo isn't this repository."
+  } ],
+  "rejected" : [ ],
+  "posted" : true
+}

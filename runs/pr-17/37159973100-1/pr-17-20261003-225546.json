@@ -1,0 +1,49 @@
+{
+  "pr" : 17,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T22:55:49.305061197Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 4,
+  "inputTokens" : 24843,
+  "outputTokens" : 3947,
+  "estimatedCostUsd" : 0.178312,
+  "summary" : "This PR adds a nightly and on-completion workflow that copies AI Review run records into a `stats` branch and adds one line per run attempt to runs.jsonl. The structure is sound: only trusted code from main runs, there is a single writer, and one bad run doesn't stop the rest. I found one bookkeeping gap that makes some runs get downloaded again on every trigger. All work is saved only at the very end, so a run that is too large can keep timing out and never commit.",
+  "accepted" : [ {
+    "file" : ".github/scripts/collect_review_stats.py",
+    "line" : 90,
+    "severity" : "major",
+    "title" : "A re-run with no artifact is never recorded, so the run is downloaded again on every trigger",
+    "whatGoesWrong" : "Attempt 1 of a review uploads its artifact. Someone re-runs it, and attempt 2 is cancelled or fails before writing a record, so it uploads nothing. The download still succeeds because attempt 1's artifact exists. The loop then skips attempt 1 as already done and never writes a row for attempt 2. That run stays 'uncollected', so every later trigger downloads its artifacts again, for up to 90 days.",
+    "whyItMatters" : "Wasted downloads and API calls pile up with each such run. The workflow runs after every AI Review and nightly, so this extra work makes the 10-minute timeout more likely. Those attempts also never show up in the stats.",
+    "howToFix" : "After looping over the downloaded artifacts, check whether a row exists for (run_id, latest_attempt). If none does and it isn't in `done`, add a base_row for that attempt, the same way the no-artifact branch does."
+  }, {
+    "file" : ".github/workflows/ai-review-stats.yml",
+    "line" : 28,
+    "severity" : "minor",
+    "title" : "A big backfill that times out saves nothing, and the next run hits the same wall",
+    "whatGoesWrong" : "The first run, or any run after a long outage, may have up to 500 runs to process. Each one costs a `gh run download` plus API calls. Rows are written only after every run is processed, and the push is a separate later step. If the job passes the 10-minute timeout, it is killed and nothing is committed. The next trigger starts over with the same backlog and times out again.",
+    "whyItMatters" : "Stats collection can stall for good, with no progress, until someone notices and steps in. Meanwhile artifacts keep expiring and their data is lost.",
+    "howToFix" : "Cap how many runs one invocation processes, oldest first, so each run finishes and pushes, and later runs pick up the rest. Or write runs.jsonl after each run and raise the timeout."
+  }, {
+    "file" : ".github/scripts/collect_review_stats.py",
+    "line" : 42,
+    "severity" : "minor",
+    "title" : "Runs beyond the 500 most recent are silently left out of the backfill",
+    "whatGoesWrong" : "AI Review starts a run on every push to a PR, including runs that are skipped for drafts. If more than 500 runs happen within 90 days, `gh run list --limit 500` returns only the newest 500. Older runs that are still within retention are never seen, and their artifacts expire without being collected. No warning is printed.",
+    "whyItMatters" : "The workflow exists to keep a complete history, so silent gaps defeat its purpose.",
+    "howToFix" : "Fetch runs page by page until createdAt is older than the cutoff, for example with `gh api --paginate` on the workflow runs endpoint using a `created>=` filter. Or at least print a warning when the list is full."
+  }, {
+    "file" : ".github/scripts/collect_review_stats.py",
+    "line" : 86,
+    "severity" : "minor",
+    "title" : "Manual review runs without an artifact are recorded with no PR number",
+    "whatGoesWrong" : "When a workflow_dispatch review is cancelled or fails early, the PR number is taken from the run's `pull_requests` field. GitHub leaves that field empty for workflow_dispatch runs, so the row is saved with `pr: null`. Because rows are never retried, this is permanent.",
+    "whyItMatters" : "Those runs can't be linked to their PR in the stats.",
+    "howToFix" : "Get the PR number another way for dispatch runs, for example from the run's display title or inputs. Or accept null and document it in the README."
+  } ],
+  "rejected" : [ ],
+  "posted" : true,
+  "validationError" : null,
+  "traceFile" : "pr-17-20261003-225546.trace.json"
+}

@@ -1,0 +1,24 @@
+{
+  "pr" : 16,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T22:44:53.959654093Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 5,
+  "inputTokens" : 59053,
+  "outputTokens" : 2363,
+  "estimatedCostUsd" : 0.283472,
+  "summary" : "This PR records a full trace of each run: the system prompt, every model turn with its reasoning summary, tokens and timing, and every tool call and result. It saves the trace next to the run record. It also turns a failed model call into a PROVIDER_ERROR result, so the run returns with its trace instead of crashing, and it asks Anthropic for summarized thinking. The agent-loop changes look correct and come with a test for the new failure path. One gap is left: a later step can still crash before the trace is written.",
+  "accepted" : [ {
+    "file" : "review-agent/src/main/kotlin/dev/abhinav/reviewagent/Main.kt",
+    "line" : 88,
+    "severity" : "minor",
+    "title" : "The trace is lost if fetching the full diff fails after the review is submitted",
+    "whatGoesWrong" : "The model submits a review, then the step that re-downloads the PR diff to check the findings fails. For example, `gh` is not logged in, the network drops, or `gh` is missing. That step throws an error from `fetchFullDiff`, which runs before the trace and run record are written. The program crashes and neither file is saved.",
+    "whyItMatters" : "This PR is meant to keep a trace even when a run goes wrong. Here a full, paid model run that did finish is thrown away, and nothing is left to debug from.",
+    "howToFix" : "Write the trace file right after `agent.run` returns, before the validation step. Or wrap the diff fetch and validation in `runCatching` and save the error in the run record, so both files are always written."
+  } ],
+  "rejected" : [ ],
+  "posted" : true,
+  "traceFile" : "pr-16-20261003-224453.trace.json"
+}

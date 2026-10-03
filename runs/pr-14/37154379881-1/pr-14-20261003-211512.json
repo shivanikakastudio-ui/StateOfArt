@@ -1,0 +1,23 @@
+{
+  "pr" : 14,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T21:15:12.392657670Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 4,
+  "inputTokens" : 36119,
+  "outputTokens" : 1649,
+  "estimatedCostUsd" : 0.177456,
+  "summary" : "This PR replaces the single `message` field on a finding with four fields: title, what goes wrong, why it matters and how to fix. It updates the tool schema, the input parsing, the validator, the console and JSON output, and the posted GitHub comment, with tests for each. The callers are updated consistently and I found no remaining uses of `message`. I found one minor bug: the new comment layout can damage text from the model.",
+  "accepted" : [ {
+    "file" : "review-agent/src/main/kotlin/dev/abhinav/reviewagent/review/ReviewPoster.kt",
+    "line" : 23,
+    "severity" : "minor",
+    "title" : "Comment text that starts a line with a pipe loses its first characters",
+    "whatGoesWrong" : "Kotlin fills in the model's text before `trimMargin()` runs, so the cleanup also runs over the model's own lines. Say the 'How to fix' text spans several lines and one starts with `|`, such as a markdown table row or a Kotlin line beginning `|| isEmpty()`. That line loses its leading spaces and its first `|` in the posted comment.",
+    "whyItMatters" : "Tables and code in the suggested fix show up broken in the PR comment, so the advice is harder to read or wrong. Nothing in the output warns that the text was changed.",
+    "howToFix" : "Build the body without running `trimMargin`/`trimIndent` over the model's text. For example, join fixed header strings and the four fields with `\"\\n\\n\"`, or apply `trimMargin()` to a template with placeholders before inserting the fields. Add a test whose fix text contains a line starting with `|`."
+  } ],
+  "rejected" : [ ],
+  "posted" : true
+}

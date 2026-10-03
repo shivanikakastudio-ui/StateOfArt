@@ -1,0 +1,40 @@
+{
+  "pr" : 17,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T22:38:42.589248113Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 6,
+  "inputTokens" : 38728,
+  "outputTokens" : 3380,
+  "estimatedCostUsd" : 0.222512,
+  "summary" : "This PR adds a nightly and per-run workflow, plus a Python script, that copy AI Review run records onto a `stats` branch and add one line per run to runs.jsonl. The overall design works. The main problem is the nightly backfill: it downloads the artifacts of every past run before checking whether that run is already recorded, so it gets slower each day and will eventually hit the 10-minute job timeout. Two smaller issues: one bad run stops the whole batch, and a compiled .pyc file is committed by mistake.",
+  "accepted" : [ {
+    "file" : ".github/scripts/collect_review_stats.py",
+    "line" : 44,
+    "severity" : "major",
+    "title" : "Nightly backfill downloads every past run again and will eventually time out",
+    "whatGoesWrong" : "With no run IDs given, the script lists up to 500 completed AI Review runs. For each one it calls `gh run view` and downloads all of its artifacts, and only then checks whether that run attempt is already recorded. After a few weeks of reviews, the nightly job spends minutes downloading data it already has, and it will pass the job's 10-minute timeout.",
+    "whyItMatters" : "Commit and push only happen after the script finishes. A timed-out job therefore records nothing, so the backfill that is meant to catch missed runs stops working, and every run burns CI minutes.",
+    "howToFix" : "Check runs.jsonl before any network call. Skip a run ID whose attempts are all already recorded, for example by comparing against the run's `attempt` from `gh run list --json databaseId,attempt,status`. Also stop at runs older than the artifact retention window."
+  }, {
+    "file" : ".github/scripts/collect_review_stats.py",
+    "line" : 41,
+    "severity" : "minor",
+    "title" : "One bad run stops every other run in the batch from being saved",
+    "whatGoesWrong" : "`gh run view` uses `check=True`, and the record file is read with an unguarded `json.loads`. If one run can't be viewed (a transient API error, or a deleted run) or its record JSON is truncated, the script crashes. That happens before anything is added to runs.jsonl. The nightly backfill then hits the same run every night.",
+    "whyItMatters" : "A single broken run can stop all stats collection until someone steps in by hand.",
+    "howToFix" : "Wrap each run's processing in try/except. Log the failure and skip that run so the other runs are still recorded and pushed."
+  } ],
+  "rejected" : [ {
+    "file" : ".github/scripts/__pycache__/collect_review_stats.cpython-314.pyc",
+    "line" : 1,
+    "severity" : "minor",
+    "title" : "A compiled Python cache file is committed",
+    "whatGoesWrong" : "The PR adds a local `__pycache__/*.pyc` file built by Python 3.14. CI never uses it; Python just rebuilds the cache. It will go stale as soon as the script is edited.",
+    "whyItMatters" : "It is a stale binary in the repo that clutters diffs and may confuse readers.",
+    "howToFix" : "Delete the file and add `__pycache__/` to .gitignore.",
+    "reason" : "file is not part of this PR's changes"
+  } ],
+  "posted" : true
+}

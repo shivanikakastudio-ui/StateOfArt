@@ -1,0 +1,31 @@
+{
+  "pr" : 15,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T22:28:06.892223359Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 3,
+  "inputTokens" : 15649,
+  "outputTokens" : 1233,
+  "estimatedCostUsd" : 0.087256,
+  "summary" : "This PR swaps the template greeting for a Quiz screen: a scrolling list of 10 cards, each with a three-state checkbox, plus Android Studio project files. The UI builds fine. The main problem is that each answer is held only in temporary composable memory (`remember`), so answers are lost when the screen rotates or a card scrolls off and back.",
+  "accepted" : [ {
+    "file" : "app/src/main/java/dev/abhinav/myapplication/MainActivity.kt",
+    "line" : 47,
+    "severity" : "major",
+    "title" : "Quiz answers are wiped when the user rotates the phone or scrolls",
+    "whatGoesWrong" : "A user ticks a few checkboxes, then rotates the device or switches to dark mode. Every checkbox goes back to the indeterminate state. On a small screen, scrolling a card out of view and back also resets it, because the lazy list throws away that item's remembered state when it leaves the screen.",
+    "whyItMatters" : "Users silently lose the answers they gave, which defeats the point of a quiz screen.",
+    "howToFix" : "Use `rememberSaveable` instead of `remember` for each item's state. A better option is to move the 10 answers into a list kept by the caller or a ViewModel, indexed by question, and pass each state and its change handler down to the cards."
+  }, {
+    "file" : ".idea/misc.xml",
+    "line" : 4,
+    "severity" : "minor",
+    "title" : "Committed IDE settings point to a JDK that exists only on the author's machine",
+    "whatGoesWrong" : "`misc.xml` names a local JDK (`jbr-25`). `deploymentTargetSelector.xml` holds the author's own device picker. When another developer opens the project, the IDE may report a missing SDK, or the shared files may keep changing in diffs.",
+    "whyItMatters" : "These files cause noisy diffs and setup friction for other contributors, and they have nothing to do with the feature.",
+    "howToFix" : "Remove `.idea/misc.xml` and `.idea/deploymentTargetSelector.xml` from this PR and add them to `.gitignore`. Only commit IDE files the team actually means to share."
+  } ],
+  "rejected" : [ ],
+  "posted" : true
+}

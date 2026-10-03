@@ -1,0 +1,32 @@
+{
+  "pr" : 16,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T22:43:38.396493767Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 5,
+  "inputTokens" : 64014,
+  "outputTokens" : 2073,
+  "estimatedCostUsd" : 0.297516,
+  "summary" : "This PR records every step of an agent run (prompts, the model's replies and reasoning, tool calls and results, timings) and saves it as a trace file next to the run record. To get readable reasoning, it also turns on adaptive thinking for every Anthropic request. The trace code itself looks right. My main concern is that turning thinking on changes how the reviewer behaves and what it costs, not just what gets logged. A smaller issue: no trace is saved when a run crashes.",
+  "accepted" : [ {
+    "file" : "review-agent/src/main/kotlin/dev/abhinav/reviewagent/llm/anthropic/AnthropicProvider.kt",
+    "line" : 40,
+    "severity" : "major",
+    "title" : "A logging change also turns on model thinking for every review, which makes runs cost more and get cut off more often",
+    "whatGoesWrong" : "Every request now asks the model to think before answering. Those thinking tokens come out of the same 16,000-token output limit as the reply and its tool calls. On a large PR, a turn can now hit that limit while the model is still thinking. The agent then stops with TRUNCATED and posts nothing, even though the same review would have finished before this change.",
+    "whyItMatters" : "Reviews that used to finish can now fail, and every turn bills extra output tokens. The PR only wanted to record what the model was thinking, but it also changes what the model does and what it costs.",
+    "howToFix" : "Make thinking a constructor option on AnthropicProvider, set explicitly in Main and off by default. If you keep it on, raise maxTokens so the reply still has room after thinking, and re-check cost and truncation rates on the test PRs before merging."
+  }, {
+    "file" : "review-agent/src/main/kotlin/dev/abhinav/reviewagent/Main.kt",
+    "line" : 88,
+    "severity" : "minor",
+    "title" : "No trace is saved when a run crashes, which is when it is most needed",
+    "whatGoesWrong" : "The trace lives only inside Agent.run and is returned at the end. If the API call throws partway through (network error, rate limit, a rejected request), the exception escapes run(). Main never gets to write the trace or the run record, so the CI artifact is empty for exactly the runs someone needs to debug.",
+    "whyItMatters" : "The trace exists so a failed run can be explained afterwards. Losing it on crashes defeats that purpose.",
+    "howToFix" : "Catch exceptions from provider.complete inside Agent.run and return an error outcome that carries the trace collected so far. Or pass in a trace sink that Main writes out in a finally block."
+  } ],
+  "rejected" : [ ],
+  "posted" : true,
+  "traceFile" : "pr-16-20261003-224338.trace.json"
+}

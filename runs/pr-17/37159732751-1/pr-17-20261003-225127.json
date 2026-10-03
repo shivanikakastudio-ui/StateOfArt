@@ -1,0 +1,41 @@
+{
+  "pr" : 17,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T22:51:29.615881546Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 4,
+  "inputTokens" : 22575,
+  "outputTokens" : 3587,
+  "estimatedCostUsd" : 0.16204000000000002,
+  "summary" : "This PR adds a workflow and a Python script that copy AI Review run records and traces to a `stats` branch and add one line per run attempt to runs.jsonl. The overall design is sound: it uses trusted code from main, writes one at a time, and skips runs it has already collected. I found three minor problems: some runs are retried every night without ever being recorded, rows for older attempts can get the wrong conclusion and timestamp, and the comment about queued runs is wrong.",
+  "accepted" : [ {
+    "file" : ".github/scripts/collect_review_stats.py",
+    "line" : 57,
+    "severity" : "minor",
+    "title" : "Runs with no artifact are never marked as collected, so the nightly job retries them all every night",
+    "whatGoesWrong" : "AI Review skips draft PRs and fork PRs, and some runs stop before the agent runs. Those runs have no artifact, so the download fails and the script records nothing. They never get into runs.jsonl, so every nightly backfill picks them up again for 90 days. Each retry costs a `gh run view` and a `gh run download`.",
+    "whyItMatters" : "Every draft push adds one more run to retry. Over time the nightly job spends hundreds of API calls on runs that will never have data, and it gets closer to its 10-minute timeout and the API rate limit. A real download error also looks exactly like 'no artifact', so it is hidden.",
+    "howToFix" : "When a run finishes with no matching artifact, record it anyway, for example as a row with `record_path: null` and the run's conclusion, or in a separate 'seen' list. Check `gh run view --json conclusion` for `skipped` before trying the download. Treat download errors other than 'no artifacts found' as failures."
+  }, {
+    "file" : ".github/scripts/collect_review_stats.py",
+    "line" : 82,
+    "severity" : "minor",
+    "title" : "Rows for earlier attempts get the latest attempt's conclusion and time",
+    "whatGoesWrong" : "`gh run view` returns details for the run's latest attempt only. Say attempt 1 failed, then a re-run succeeded, and both are first collected together (for example by the nightly backfill). The row for attempt 1 then records 'success' and attempt 2's created_at.",
+    "whyItMatters" : "The stats history permanently shows wrong outcomes and timestamps for re-run reviews. That skews any success-rate or timing analysis.",
+    "howToFix" : "Fetch each attempt's details separately, for example with `gh api repos/{owner}/{repo}/actions/runs/{id}/attempts/{n}`. Use that attempt's conclusion, created_at and head_sha in its row."
+  }, {
+    "file" : ".github/workflows/ai-review-stats.yml",
+    "line" : 13,
+    "severity" : "minor",
+    "title" : "Triggers that arrive while a collection is running can be dropped, not queued",
+    "whatGoesWrong" : "In a concurrency group, GitHub keeps only one pending run. If several AI Review runs finish while a stats job is running, each new pending stats run cancels the one waiting before it. Those runs are only recorded at the next nightly backfill. The comment 'Queued runs wait' says otherwise.",
+    "whyItMatters" : "Stats can be up to a day late, and anyone reading the comment will expect every trigger to be processed straight away.",
+    "howToFix" : "Fix the comment to say that dropped triggers are picked up by the nightly backfill. Or, on workflow_run events, run the backfill mode (no run id) instead of collecting a single run, so whichever run executes also catches the ones that were cancelled."
+  } ],
+  "rejected" : [ ],
+  "posted" : true,
+  "validationError" : null,
+  "traceFile" : "pr-17-20261003-225127.trace.json"
+}

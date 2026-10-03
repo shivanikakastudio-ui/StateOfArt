@@ -1,0 +1,15 @@
+{
+  "pr" : 14,
+  "model" : "claude-opus-5-5",
+  "timestamp" : "2026-10-03T21:19:41.263653717Z",
+  "outcome" : "COMPLETED",
+  "detail" : null,
+  "turns" : 5,
+  "inputTokens" : 52266,
+  "outputTokens" : 1231,
+  "estimatedCostUsd" : 0.233684,
+  "summary" : "This PR splits each finding's single `message` into four parts: a title, what goes wrong, why it matters and how to fix it. It also updates the prompt, the submit_review tool, the validator, console and JSON output, and the comment posted to GitHub. It adds tests for the comment layout and for rejecting blank fields. I checked every place that used `message` and none are left. The tool's input format still lists every property as required, which strict mode needs. The early returns inside `associateWith` work because it is an inline function. I found no real problems. One small thing: the display labels in `TEXT_FIELDS` are never used.",
+  "accepted" : [ ],
+  "rejected" : [ ],
+  "posted" : true
+}
