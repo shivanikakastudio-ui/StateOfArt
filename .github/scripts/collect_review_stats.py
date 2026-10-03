@@ -3,7 +3,8 @@
 
 Usage: collect_review_stats.py <stats-dir> [run-id ...]
 With no run ids, backfills every AI Review run not yet collected. Idempotent: a run
-attempt already in runs.jsonl is skipped. Standard library only; needs `gh` with GH_TOKEN.
+attempt already in runs.jsonl is skipped. Runs without an artifact (cancelled, skipped,
+failed early) get a row without stats, so they're never retried. Standard library only; needs `gh` with GH_TOKEN.
 """
 import datetime
 import json
@@ -35,27 +36,57 @@ def collected_keys(index: pathlib.Path) -> set[tuple[int, int]]:
     return keys
 
 
-def uncollected_run_ids(done: set[tuple[int, int]]) -> list[int]:
-    """Completed runs within the retention window whose latest attempt isn't recorded yet.
-    Decided from the run list alone, so already-collected runs cost no further API calls."""
+def uncollected_runs(done: set[tuple[int, int]]) -> list[tuple[int, int]]:
+    """(run id, latest attempt) for completed runs within the retention window that aren't
+    recorded yet. Decided from the run list alone, so collected runs cost no further API calls."""
     runs = json.loads(gh("run", "list", "--workflow", WORKFLOW, "--limit", "500",
                          "--json", "databaseId,attempt,status,createdAt"))
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=RETENTION_DAYS)
     return [
-        r["databaseId"] for r in runs
+        (r["databaseId"], r["attempt"]) for r in runs
         if r["status"] == "completed"
         and datetime.datetime.fromisoformat(r["createdAt"].replace("Z", "+00:00")) >= cutoff
         and (r["databaseId"], r["attempt"]) not in done
     ]
 
 
-def collect_run(run_id: int, stats: pathlib.Path, done: set[tuple[int, int]]) -> list[dict]:
-    meta = json.loads(gh("run", "view", str(run_id), "--json", "headSha,headBranch,event,conclusion,createdAt,url"))
+def attempt_meta(run_id: int, attempt: int) -> dict:
+    """Details of one attempt. `gh run view` only describes the latest attempt, which would
+    give earlier attempts the wrong conclusion and time."""
+    return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/attempts/{attempt}"))
+
+
+def base_row(run_id: int, attempt: int, pr: int | None, meta: dict) -> dict:
+    return {
+        "run_id": run_id,
+        "attempt": attempt,
+        "pr": pr,
+        "head_sha": meta["head_sha"],
+        "branch": meta["head_branch"],
+        "event": meta["event"],
+        "conclusion": meta["conclusion"],
+        "created_at": meta["run_started_at"] or meta["created_at"],
+        "url": meta["html_url"],
+        "record_path": None,
+        "trace_path": None,
+    }
+
+
+def collect_run(run_id: int, latest_attempt: int, stats: pathlib.Path, done: set[tuple[int, int]]) -> list[dict]:
     rows = []
     with tempfile.TemporaryDirectory() as tmp:
-        # Fails when a run has no artifacts (e.g. it stopped before the agent ran); record nothing then.
-        if subprocess.run(["gh", "run", "download", str(run_id), "-D", tmp], capture_output=True).returncode != 0:
+        download = subprocess.run(["gh", "run", "download", str(run_id), "-D", tmp], capture_output=True, text=True)
+        if download.returncode != 0:
+            if "no valid artifacts" not in (download.stderr + download.stdout).lower():
+                raise RuntimeError(f"download failed: {download.stderr.strip()}")
+            # Cancelled, skipped or early-failing runs have no artifact. Record them anyway,
+            # so they're marked as collected and never retried.
+            if (run_id, latest_attempt) not in done:
+                meta = attempt_meta(run_id, latest_attempt)
+                prs = meta.get("pull_requests") or []
+                rows.append(base_row(run_id, latest_attempt, prs[0]["number"] if prs else None, meta))
             return rows
+
         for artifact in sorted(pathlib.Path(tmp).iterdir()):
             match = ARTIFACT.match(artifact.name)
             if not match:
@@ -72,19 +103,9 @@ def collect_run(run_id: int, stats: pathlib.Path, done: set[tuple[int, int]]) ->
                     trace = dest / f.name
                 else:
                     record = dest / f.name
-            row = {
-                "run_id": run_id,
-                "attempt": attempt,
-                "pr": pr,
-                "head_sha": meta["headSha"],
-                "branch": meta["headBranch"],
-                "event": meta["event"],
-                "conclusion": meta["conclusion"],
-                "created_at": meta["createdAt"],
-                "url": meta["url"],
-                "record_path": str(record.relative_to(stats)) if record else None,
-                "trace_path": str(trace.relative_to(stats)) if trace else None,
-            }
+            row = base_row(run_id, attempt, pr, attempt_meta(run_id, attempt))
+            row["record_path"] = str(record.relative_to(stats)) if record else None
+            row["trace_path"] = str(trace.relative_to(stats)) if trace else None
             if record:
                 r = json.loads(record.read_text())
                 row.update(
@@ -106,13 +127,15 @@ def main() -> None:
     stats = pathlib.Path(sys.argv[1])
     index = stats / "runs.jsonl"
     done = collected_keys(index)
-    run_ids = [int(x) for x in sys.argv[2:]] or uncollected_run_ids(done)
+    explicit = [int(x) for x in sys.argv[2:]]
+    runs = [(i, json.loads(gh("run", "view", str(i), "--json", "attempt"))["attempt"]) for i in explicit] \
+        or uncollected_runs(done)
 
     new_rows, failed = [], []
-    for run_id in run_ids:
+    for run_id, latest_attempt in runs:
         # One broken run (deleted, API error, truncated record) must not stop the rest.
         try:
-            new_rows += collect_run(run_id, stats, done)
+            new_rows += collect_run(run_id, latest_attempt, stats, done)
         except Exception as e:  # noqa: BLE001 - log and move on
             failed.append(run_id)
             print(f"Skipping run {run_id}: {e}", file=sys.stderr)

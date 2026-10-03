@@ -10,7 +10,9 @@ on:
     - cron: "17 3 * * *"   # nightly backfill of anything missed
   workflow_dispatch:
 
-# One writer at a time, so pushes to `stats` never race. Queued runs wait.
+# One writer at a time, so pushes to `stats` never race. GitHub keeps only one waiting
+# run per group and drops older ones, so every run backfills everything not yet collected
+# rather than just the run that triggered it.
 concurrency:
   group: ai-review-stats
   cancel-in-progress: false
@@ -59,8 +61,7 @@ jobs:
       - name: Collect run records
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-        run: python3 .github/scripts/collect_review_stats.py stats $RUN_ID
+        run: python3 .github/scripts/collect_review_stats.py stats
 
       - name: Commit and push
         working-directory: stats
