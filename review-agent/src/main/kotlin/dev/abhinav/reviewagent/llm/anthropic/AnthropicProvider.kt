@@ -9,6 +9,7 @@ import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.StopReason as AnthropicStopReason
 import com.anthropic.models.messages.TextBlockParam
+import com.anthropic.models.messages.ThinkingConfigAdaptive
 import com.anthropic.models.messages.Tool
 import com.anthropic.models.messages.ToolResultBlockParam
 import com.anthropic.models.messages.ToolUseBlockParam
@@ -35,6 +36,8 @@ class AnthropicProvider(
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(maxTokens)
+            // Return a readable summary of the model's reasoning (default is none), for run traces.
+            .thinking(ThinkingConfigAdaptive.builder().display(ThinkingConfigAdaptive.Display.SUMMARIZED).build())
             .apply { if (!system.isNullOrBlank()) system(system) }
             .apply { tools.forEach { addTool(it.toAnthropicTool()) } }
             .messages(messages.map { it.toAnthropicParam() })
@@ -114,6 +117,8 @@ class AnthropicProvider(
 
     private fun Message.toModelTurn(): ModelTurn {
         val text = content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("\n")
+        val reasoning = content().mapNotNull { it.thinking().orElse(null)?.thinking() }
+            .filter { it.isNotBlank() }.joinToString("\n\n")
 
         val toolCalls = content().mapNotNull { block ->
             block.toolUse().orElse(null)?.let { toolUse ->
@@ -140,6 +145,7 @@ class AnthropicProvider(
             stopReason = stopReason,
             rawStopReason = stopReason().map { it.asString() }.orElse(null),
             usage = Usage(usage().inputTokens(), usage().outputTokens()),
+            reasoning = reasoning,
             providerPayload = this,
         )
     }

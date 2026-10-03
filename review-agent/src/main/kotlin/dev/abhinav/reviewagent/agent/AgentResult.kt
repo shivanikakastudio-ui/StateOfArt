@@ -22,4 +22,6 @@ data class AgentResult(
     val turns: Int,
     val totalUsage: Usage,
     val detail: String? = null,
+    /** Every step of the run, in order. */
+    val trace: List<TraceEntry> = emptyList(),
 )

@@ -32,12 +32,24 @@ class Agent(
 
     fun run(task: String): AgentResult {
         val messages = mutableListOf<ChatMessage>(ChatMessage.User(task))
+        val trace = mutableListOf(
+            TraceEntry("system", system, turn = 0),
+            TraceEntry("user", task, turn = 0),
+        )
         var totalInput = 0L
         var totalOutput = 0L
         var remindersSent = 0
 
         for (turnNumber in 1..config.maxTurns) {
+            val started = System.nanoTime()
             val turn = provider.complete(system, messages, toolSpecs)
+            trace += TraceEntry(
+                role = "assistant", content = turn.text, turn = turnNumber,
+                thinking = turn.reasoning.ifBlank { null },
+                stopReason = turn.rawStopReason ?: turn.stopReason.name,
+                inputTokens = turn.usage.inputTokens, outputTokens = turn.usage.outputTokens,
+                durationMs = (System.nanoTime() - started) / 1_000_000,
+            )
             messages += ChatMessage.Assistant(turn)
             totalInput += turn.usage.inputTokens
             totalOutput += turn.usage.outputTokens
@@ -45,7 +57,7 @@ class Agent(
             logTurn(turnNumber, turn, total)
 
             fun result(outcome: Outcome, detail: String? = null) =
-                AgentResult(outcome, turn.text, turnNumber, total, detail)
+                AgentResult(outcome, turn.text, turnNumber, total, detail, trace.toList())
 
             when (turn.stopReason) {
                 StopReason.END_TURN -> {
@@ -53,7 +65,9 @@ class Agent(
                     if (remindersSent >= 1) return result(Outcome.NO_SUBMISSION, "never called $finishTool")
                     remindersSent++
                     log("   ! answered without $finishTool; sending one reminder")
-                    messages += ChatMessage.User("Finish by calling $finishTool. Do not answer in plain text.")
+                    val reminder = "Finish by calling $finishTool. Do not answer in plain text."
+                    messages += ChatMessage.User(reminder)
+                    trace += TraceEntry("user", reminder, turn = turnNumber)
                 }
                 StopReason.MAX_TOKENS -> return result(Outcome.TRUNCATED, "reply hit maxTokens")
                 StopReason.REFUSAL -> return result(Outcome.REFUSED)
@@ -61,6 +75,10 @@ class Agent(
                 StopReason.TOOL_USE -> {
                     // Every tool call must get a result with the matching id, in one message.
                     val results = turn.toolCalls.map(::runTool)
+                    turn.toolCalls.zip(results).forEach { (call, res) ->
+                        trace += TraceEntry("tool_call", "", turnNumber, name = call.name, input = call.input)
+                        trace += TraceEntry("tool_result", res.content, turnNumber, name = call.name, isError = res.isError)
+                    }
                     messages += ChatMessage.ToolResults(results)
                     val finished = turn.toolCalls.zip(results).any { (call, res) ->
                         call.name == finishToolName && !res.isError
@@ -80,6 +98,7 @@ class Agent(
         return AgentResult(
             Outcome.MAX_TURNS, finalText = "", turns = config.maxTurns,
             totalUsage = Usage(totalInput, totalOutput), detail = "no answer after ${config.maxTurns} turns",
+            trace = trace.toList(),
         )
     }
 
