@@ -16,6 +16,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.state.ToggleableState
@@ -44,7 +45,7 @@ fun Quiz(title: String, modifier: Modifier = Modifier) {
     LazyColumn(modifier) {
         item { Text(title) }
         items(10) {
-            var state by remember { mutableStateOf(ToggleableState.Indeterminate) }
+            var state by rememberSaveable { mutableStateOf(ToggleableState.Indeterminate) }
             Card {
                 Text("How're you feeling?")
                 TriStateCheckbox(
