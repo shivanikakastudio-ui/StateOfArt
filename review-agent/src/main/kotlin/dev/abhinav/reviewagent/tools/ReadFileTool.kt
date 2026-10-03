@@ -37,9 +37,9 @@ class ReadFileTool(
         }
         if (lines.isEmpty()) return ToolResult(call.id, "$path is empty.")
 
-        val start = ((call.input["start_line"] as? Number)?.toInt() ?: 1).coerceAtLeast(1)
+        val start = (call.intInput("start_line").getOrElse { return error(call, it.message!!) } ?: 1).coerceAtLeast(1)
         if (start > lines.size) return error(call, "start_line $start is past the end of $path (${lines.size} lines)")
-        val requestedEnd = (call.input["end_line"] as? Number)?.toInt() ?: lines.size
+        val requestedEnd = call.intInput("end_line").getOrElse { return error(call, it.message!!) } ?: lines.size
         val end = minOf(requestedEnd, lines.size, start + maxLines - 1)
         if (end < start) return error(call, "end_line must be >= start_line")
 

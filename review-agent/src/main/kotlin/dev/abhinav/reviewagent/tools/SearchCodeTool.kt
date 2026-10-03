@@ -1,7 +1,6 @@
 package dev.abhinav.reviewagent.tools
 
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /** Searches tracked files in the repository with `git grep`. */
 class SearchCodeTool(
@@ -40,28 +39,25 @@ class SearchCodeTool(
             command += listOf("--", path)
         }
 
-        val process = try {
-            ProcessBuilder(command).directory(repoRoot).redirectErrorStream(true).start()
-        } catch (e: Exception) {
-            return error(call, "Could not run git grep: ${e.message}")
-        }
-        val output = process.inputStream.bufferedReader().readText()
-        if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            return error(call, "git grep timed out after ${timeoutSeconds}s; try a narrower pattern or path")
+        val result = when (val run = runCommand(command, repoRoot, timeoutSeconds)) {
+            is CommandResult.FailedToStart -> return error(call, "Could not run git grep: ${run.message}")
+            is CommandResult.TimedOut ->
+                return error(call, "git grep timed out after ${run.seconds}s; try a narrower pattern or path")
+            is CommandResult.Finished -> run
         }
 
-        return when (process.exitValue()) {
+        return when (result.exitCode) {
             0 -> {
-                val lines = output.lines().filter { it.isNotBlank() }
+                val lines = result.output.lines().filter { it.isNotBlank() }
                 val shown = lines.take(maxMatches).joinToString("\n")
-                val note = if (lines.size > maxMatches) {
-                    "\n\n[Showing $maxMatches of ${lines.size} matches. Narrow the pattern or path to see the rest.]"
+                val note = if (lines.size > maxMatches || result.truncated) {
+                    "\n\n[Showing $maxMatches of ${lines.size}${if (result.truncated) "+" else ""} matches. " +
+                        "Narrow the pattern or path to see the rest.]"
                 } else ""
                 ToolResult(call.id, shown + note)
             }
             1 -> ToolResult(call.id, "No matches for: $pattern")  // git grep exits 1 when nothing matches
-            else -> error(call, "git grep failed (exit ${process.exitValue()}): ${output.trim()}")
+            else -> error(call, "git grep failed (exit ${result.exitCode}): ${result.output.trim()}")
         }
     }
 
