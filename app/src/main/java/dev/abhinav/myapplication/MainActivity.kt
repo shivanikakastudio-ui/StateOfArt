@@ -37,17 +37,26 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    }
+}
 
 @Composable
 fun Quiz(title: String, modifier: Modifier = Modifier) {
     LazyColumn(modifier) {
-        item{Text(title)}
+        item { Text(title) }
         items(10) {
-            var state by remember {mutableStateOf(ToggleableState.Indeterminate)}
+            var state by remember { mutableStateOf(ToggleableState.Indeterminate) }
             Card {
                 Text("How're you feeling?")
-                TriStateCheckbox(state, {state = it })
+                TriStateCheckbox(
+                    state,
+                    {
+                        state =
+                            when (state) {
+                                ToggleableState.On -> ToggleableState.Off
+                                ToggleableState.Off -> ToggleableState.Indeterminate
+                                ToggleableState.Indeterminate -> ToggleableState.On
+                            }
+                    })
             }
         }
     }
