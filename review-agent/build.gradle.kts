@@ -9,6 +9,11 @@ kotlin {
 
 dependencies {
     implementation(libs.anthropic.java)
+    testImplementation(kotlin("test"))
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 application {

@@ -1,7 +1,6 @@
 package dev.abhinav.reviewagent.tools
 
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /** Fetches a pull request's unified diff with the GitHub CLI (`gh pr diff`). */
 class GetPrDiffTool(
@@ -25,31 +24,24 @@ class GetPrDiffTool(
 
     override fun execute(call: ToolCall): ToolResult {
         // The model usually follows the schema, but validate anyway.
-        val prNumber = (call.input["pr_number"] as? Number)?.toInt()
-            ?: return error(call, "pr_number must be an integer, got: ${call.input["pr_number"]}")
+        val prNumber = call.intInput("pr_number").getOrElse { return error(call, it.message!!) }
+            ?: return error(call, "pr_number is required")
         if (prNumber <= 0) return error(call, "pr_number must be positive, got: $prNumber")
 
-        val process = try {
-            ProcessBuilder("gh", "pr", "diff", prNumber.toString())
-                .directory(repoDir)
-                .redirectErrorStream(true)
-                .start()
-        } catch (e: Exception) {
-            return error(call, "Could not run the GitHub CLI (gh): ${e.message}")
-        }
-
-        val output = process.inputStream.bufferedReader().readText()
-        if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            return error(call, "gh pr diff timed out after ${timeoutSeconds}s")
-        }
-        if (process.exitValue() != 0) {
-            return error(call, "gh pr diff failed (exit ${process.exitValue()}): ${output.trim()}")
+        val output = when (val result = runCommand(listOf("gh", "pr", "diff", prNumber.toString()), repoDir, timeoutSeconds)) {
+            is CommandResult.FailedToStart -> return error(call, "Could not run the GitHub CLI (gh): ${result.message}")
+            is CommandResult.TimedOut -> return error(call, "gh pr diff timed out after ${result.seconds}s")
+            is CommandResult.Finished -> {
+                if (result.exitCode != 0) {
+                    return error(call, "gh pr diff failed (exit ${result.exitCode}): ${result.output.trim()}")
+                }
+                result.output
+            }
         }
 
         // Say so explicitly when the diff is cut, so the model doesn't review half a change unawares.
         val content = if (output.length <= maxChars) output else
-            output.take(maxChars) + "\n\n[Diff truncated: showing the first $maxChars of ${output.length} characters.]"
+            output.take(maxChars) + "\n\n[Diff truncated: showing the first $maxChars of ${output.length}+ characters.]"
         return ToolResult(toolCallId = call.id, content = content)
     }
 

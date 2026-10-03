@@ -20,7 +20,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build and run unit tests
-        run: ./gradlew assembleDebug testDebugUnitTest
+        run: ./gradlew assembleDebug testDebugUnitTest :review-agent:test
 
   lint:
     runs-on: ubuntu-latest
