@@ -5,6 +5,7 @@ Usage: collect_review_stats.py <stats-dir> [run-id ...]
 With no run ids, backfills every AI Review run not yet collected. Idempotent: a run
 attempt already in runs.jsonl is skipped. Standard library only; needs `gh` with GH_TOKEN.
 """
+import datetime
 import json
 import pathlib
 import re
@@ -14,6 +15,8 @@ import sys
 import tempfile
 
 WORKFLOW = "AI Review"
+# Artifacts older than this are deleted by GitHub, so there is nothing left to collect.
+RETENTION_DAYS = 90
 ARTIFACT = re.compile(r"^ai-review-pr-(\d+)-(\d+)$")
 
 
@@ -32,9 +35,18 @@ def collected_keys(index: pathlib.Path) -> set[tuple[int, int]]:
     return keys
 
 
-def all_run_ids() -> list[int]:
-    runs = json.loads(gh("run", "list", "--workflow", WORKFLOW, "--limit", "500", "--json", "databaseId,status"))
-    return [r["databaseId"] for r in runs if r["status"] == "completed"]
+def uncollected_run_ids(done: set[tuple[int, int]]) -> list[int]:
+    """Completed runs within the retention window whose latest attempt isn't recorded yet.
+    Decided from the run list alone, so already-collected runs cost no further API calls."""
+    runs = json.loads(gh("run", "list", "--workflow", WORKFLOW, "--limit", "500",
+                         "--json", "databaseId,attempt,status,createdAt"))
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=RETENTION_DAYS)
+    return [
+        r["databaseId"] for r in runs
+        if r["status"] == "completed"
+        and datetime.datetime.fromisoformat(r["createdAt"].replace("Z", "+00:00")) >= cutoff
+        and (r["databaseId"], r["attempt"]) not in done
+    ]
 
 
 def collect_run(run_id: int, stats: pathlib.Path, done: set[tuple[int, int]]) -> list[dict]:
@@ -94,17 +106,25 @@ def main() -> None:
     stats = pathlib.Path(sys.argv[1])
     index = stats / "runs.jsonl"
     done = collected_keys(index)
-    run_ids = [int(x) for x in sys.argv[2:]] or all_run_ids()
+    run_ids = [int(x) for x in sys.argv[2:]] or uncollected_run_ids(done)
 
-    new_rows = []
+    new_rows, failed = [], []
     for run_id in run_ids:
-        new_rows += collect_run(run_id, stats, done)
+        # One broken run (deleted, API error, truncated record) must not stop the rest.
+        try:
+            new_rows += collect_run(run_id, stats, done)
+        except Exception as e:  # noqa: BLE001 - log and move on
+            failed.append(run_id)
+            print(f"Skipping run {run_id}: {e}", file=sys.stderr)
 
     if new_rows:
         with index.open("a") as out:
             for row in sorted(new_rows, key=lambda r: (r["created_at"], r["attempt"])):
                 out.write(json.dumps(row, sort_keys=True) + "\n")
     print(f"Collected {len(new_rows)} new run(s); {len(done) + len(new_rows)} in total.")
+    if failed:
+        # Rows collected above are still written and pushed; the next run retries the failures.
+        print(f"{len(failed)} run(s) failed and will be retried: {failed}", file=sys.stderr)
 
 
 if __name__ == "__main__":
